@@ -28,6 +28,8 @@ enum DefaultLayout {
 
         "kiro.credits", "kiro.bonus", "kiro.overages",
 
+        "opencodego.rolling", "opencodego.weekly", "opencodego.monthly",
+
         "openrouter.credits", "openrouter.balance",
         "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
 
@@ -64,6 +66,7 @@ enum DefaultLayout {
         "cursor.auto", "cursor.api",
         "copilot.premium",
         "kiro.credits",
+        "opencodego.rolling",
         "openrouter.credits",
         "zai.session", "zai.weekly"
     ]
@@ -95,6 +98,8 @@ enum DefaultLayout {
         "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30",
         // Kiro: Credits meter stays above the fold; Bonus Credits and Overages sit below the caret.
         "kiro.bonus", "kiro.overages",
+        // OpenCode Go: Rolling (5-hour) meter stays above the fold; Weekly and Monthly sit below.
+        "opencodego.weekly", "opencodego.monthly",
         // OpenRouter: Credits meter + Balance stay above the fold; period spend and the per-key cap
         // sit below the caret.
         "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",

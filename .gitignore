@@ -28,3 +28,4 @@ node_modules/
 # Local appcast / Sparkle feed output
 feed/
 appcast.xml
+createapp.sh

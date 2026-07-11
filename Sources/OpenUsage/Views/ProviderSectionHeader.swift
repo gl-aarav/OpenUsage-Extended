@@ -84,8 +84,11 @@ struct ProviderSectionHeader: View {
             // Match the menu-bar strip glyph: a near-zero inset lets the mark fill its box so the
             // header logo reads at the same scale as the tray, instead of floating small inside the
             // default list-context padding.
+            let grokIconSize: CGFloat = 20
+            let grokIconWidth: CGFloat = 34
             ProviderIcon(source: provider.icon, inset: 0.04)
-                .frame(width: density.headerIconSize, height: density.headerIconSize)
+                .frame(width: provider.id == "grok" ? grokIconWidth : density.headerIconSize,
+                       height: provider.id == "grok" ? grokIconSize : density.headerIconSize)
                 .partyPulse(partyMode)
         }
         // Shave the left inset so the leading grip sits a touch closer to the card's edge.

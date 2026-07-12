@@ -200,12 +200,18 @@ struct WidgetData: Hashable {
 
     /// Rounds a value to the precision this kind shows in the headline — whole percent, one-decimal
     /// count, or cents — so the meter geometry and the spent check never disagree with the printed
-    /// number. (A value that reads "0%" must register as zero, not a hairline sliver.)
+    /// number. (A value that reads "0%" must register as zero, not a hairline sliver.) Detailed
+    /// Analytics raises the headline precision to two decimals, so the meter follows.
     private func roundedAtDisplayPrecision(_ value: Double) -> Double {
         switch kind {
-        case .percent: return value.rounded()
-        case .count: return (value * 10).rounded() / 10
-        case .dollars: return (value * 100).rounded() / 100
+        case .percent:
+            let scale = DetailedAnalyticsSetting.isEnabled ? 100.0 : 1.0
+            return (value * scale).rounded() / scale
+        case .count:
+            let scale = DetailedAnalyticsSetting.isEnabled ? 100.0 : 10.0
+            return (value * scale).rounded() / scale
+        case .dollars:
+            return (value * 100).rounded() / 100
         }
     }
 
@@ -234,8 +240,8 @@ struct WidgetData: Hashable {
             if kind == .percent {
                 // Percent is the only bounded unit that should collapse to a tray percentage. Clamp both
                 // ends so a provider sample can never print "-5%" or "105%" beside the icon.
-                let percent = min(100, max(0, Int((displayedValue / limit * 100).rounded())))
-                return "\(percent)%"
+                let percent = min(100, max(0, displayedValue / limit * 100))
+                return MetricFormatter.number(percent, kind: .percent, style: .tray)
             }
             return MetricFormatter.number(displayedValue, kind: kind, style: .tray)
         }
@@ -279,9 +285,10 @@ struct WidgetData: Hashable {
             return nil
         case .dollars:
             // Mirror the original OpenUsage panel: a bounded dollar metric's secondary line reads
-            // "$<limit> limit" — no "of" prefix, and cents only when the limit isn't a whole dollar.
+            // "$<limit> limit" — no "of" prefix, and cents only when the limit isn't a whole dollar
+            // (or always when Detailed Analytics is on).
             guard let limit else { return nil }
-            let digits = limit.rounded() == limit ? 0 : 2
+            let digits = DetailedAnalyticsSetting.isEnabled || limit.rounded() != limit ? 2 : 0
             let amount = Formatters.currency(limit, fractionDigits: digits)
             return "\(amount) \(limitNoun ?? "limit")"
         case .count:
@@ -497,8 +504,14 @@ extension WidgetData {
                 // Keep the same near-empty safeguard as `.behind` so it never becomes a red alarm.
                 guard used / ctx.limit >= 0.05 else { return absoluteLevelState(used: used, limit: limit) }
                 let projected = result.projectedUsage / ctx.limit
-                let spare = Int(((1 - projected) * 100).rounded())
-                guard spare >= 1 else { return .runningOut(eta: nil, projectedFraction: projected) }
+                let sparePercent = ((1 - projected) * 100)
+                let spare: String
+                if DetailedAnalyticsSetting.isEnabled {
+                    spare = sparePercent.formatted(.number.precision(.fractionLength(2)).locale(Locale(identifier: "en_US")))
+                } else {
+                    spare = "\(Int(sparePercent.rounded()))"
+                }
+                guard sparePercent >= 1 else { return .runningOut(eta: nil, projectedFraction: projected) }
                 return .closeToLimit(spare: "~\(spare)% spare", projectedFraction: projected)
             case .behind:
                 // Coarse whole-percent meters can read 1% used very early in a window; linear
@@ -520,9 +533,13 @@ extension WidgetData {
 
     /// Color from the share used when there's no trustworthy pace projection (no reset window, or a
     /// projection deliberately distrusted near-empty): yellow at 80% used, red at 90%, blue below.
-    /// Carries no projection copy or tick — a plain level reading.
+    /// Carries no projection copy or tick — a plain level reading. Rounds to the same precision the
+    /// headline shows so the color band never disagrees with the printed percent.
     private func absoluteLevelState(used: Double, limit: Double) -> MeterState {
-        let percentUsed = (min(max(used / limit, 0), 1) * 100).rounded()
+        let rawPercent = min(max(used / limit, 0), 1) * 100
+        let percentUsed = DetailedAnalyticsSetting.isEnabled
+            ? (rawPercent * 100).rounded() / 100
+            : rawPercent.rounded()
         if percentUsed >= 90 { return .level(.critical) }
         if percentUsed >= 80 { return .level(.warning) }
         return .level(.normal)

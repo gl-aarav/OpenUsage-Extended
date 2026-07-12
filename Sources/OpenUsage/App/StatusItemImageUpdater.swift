@@ -11,11 +11,26 @@ import Observation
 final class StatusItemImageUpdater {
     private let container: AppContainer
     private let apply: (NSImage) -> Void
+    private var defaultsObserver: NSObjectProtocol?
 
     /// - Parameter apply: sets the rendered image onto the status-item button.
     init(container: AppContainer, apply: @escaping (NSImage) -> Void) {
         self.container = container
         self.apply = apply
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.scheduleDelayedUpdate()
+        }
+    }
+
+    @MainActor
+    deinit {
+        if let observer = defaultsObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     /// Render now and re-arm on the next observable change.

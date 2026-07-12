@@ -20,6 +20,7 @@ struct SettingsScreen: View {
     @AppStorage(TimeFormatSetting.key) private var timeFormat = TimeFormatSetting.auto
     @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
     @AppStorage(LogLevelSetting.key) private var logLevel = LogLevelSetting.fallback
+    @AppStorage(DetailedAnalyticsSetting.key) private var detailedAnalytics = false
     /// Surfaced under the Advanced rows when copying the path or revealing the file fails.
     @State private var logActionError: String?
     /// macOS notification authorization for OpenUsage, surfaced in the Notifications section so a
@@ -136,6 +137,11 @@ struct SettingsScreen: View {
                     Toggle("", isOn: $store.alwaysShowPacing)
                         .settingsSwitchStyle()
                         .hoverTooltip("Show how you're pacing on every metric, not just ones near their limit")
+                }
+                row("Detailed Analytics") {
+                    Toggle("", isOn: $detailedAnalytics)
+                        .settingsSwitchStyle()
+                        .hoverTooltip("Show values with two decimal digits in the menu bar and dashboard")
                 }
             }
             notificationsSection

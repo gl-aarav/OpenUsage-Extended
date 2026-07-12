@@ -24,12 +24,19 @@ enum KiroUsageMapper {
 
         var lines: [MetricLine] = []
 
-        // Primary credit pool from usageBreakdownList. Prefer CREDIT-type entries, but fall back
-        // to the first entry if no explicit CREDIT type is present (some Kiro responses omit it).
-        if let breakdownList = root["usageBreakdownList"] as? [[String: Any]] {
-            let creditEntries = breakdownList.filter { ($0["type"] as? String)?.uppercased() == "CREDIT" }
+        // Primary credit pool from usageBreakdownList (or the alias usageBreakdowns). Prefer
+        // CREDIT-type entries, but fall back to the first entry if no explicit CREDIT type is
+        // present (some Kiro responses omit it).
+        let breakdownList = (root["usageBreakdownList"] as? [[String: Any]])
+            ?? (root["usageBreakdowns"] as? [[String: Any]])
+        if let breakdownList {
+            let creditEntries = breakdownList.filter {
+                let type = ($0["type"] as? String ?? $0["resourceType"] as? String)?.uppercased()
+                return type == "CREDIT"
+            }
             let entriesToMap = creditEntries.isEmpty ? Array(breakdownList.prefix(1)) : creditEntries
             for entry in entriesToMap {
+                AppLog.debug(LogTag.plugin("kiro"), "Kiro breakdown entry: type=\(entry["type"] as? String ?? entry["resourceType"] as? String ?? "nil"), currentUsage=\(entry["currentUsage"] ?? "nil") (precise=\(entry["currentUsageWithPrecision"] ?? "nil")), usageLimit=\(entry["usageLimit"] ?? "nil") (precise=\(entry["usageLimitWithPrecision"] ?? "nil")), resetDate=\(entry["resetDate"] ?? "nil")")
                 if let line = try? creditLine(from: entry, resetDate: nextReset) {
                     lines.append(line)
                 }
@@ -57,10 +64,12 @@ enum KiroUsageMapper {
 
     // MARK: - Private
 
-    /// A credit pool entry from `usageBreakdownList` → a bounded count meter.
+    /// A credit pool entry from `usageBreakdownList` → a bounded count meter. Upstream returns both
+    /// rounded whole-number fields (`currentUsage`, `usageLimit`) and exact `...WithPrecision` doubles;
+    /// prefer the precision fields so the dashboard matches `app.kiro.dev/account/usage`.
     private static func creditLine(from entry: [String: Any], resetDate: Date?) throws -> MetricLine {
-        let used = ProviderParse.number(entry["currentUsage"]) ?? 0
-        let limit = ProviderParse.number(entry["usageLimit"])
+        let used = parsePreciseNumber(entry, key: "currentUsage") ?? 0
+        let limit = parsePreciseNumber(entry, key: "usageLimit", fallbackToZero: false)
         let reset = parseResetDate(entry["resetDate"]) ?? resetDate
 
         guard let limit, limit > 0 else {
@@ -79,8 +88,8 @@ enum KiroUsageMapper {
 
     /// A bonus/free-trial pool → a bounded count meter with its own reset/expiry.
     private static func bonusLine(from entry: [String: Any], label: String, resetDate: Date?) throws -> MetricLine {
-        let used = ProviderParse.number(entry["currentUsage"]) ?? 0
-        let limit = ProviderParse.number(entry["usageLimit"])
+        let used = parsePreciseNumber(entry, key: "currentUsage") ?? 0
+        let limit = parsePreciseNumber(entry, key: "usageLimit", fallbackToZero: false)
         let reset = parseResetDate(entry["expiryDate"]) ?? resetDate
 
         guard let limit, limit > 0 else {
@@ -95,6 +104,18 @@ enum KiroUsageMapper {
             resetsAt: reset,
             periodDurationMs: MetricPeriod.monthMs
         )
+    }
+
+    /// Reads the exact `<key>WithPrecision` field if present, otherwise falls back to the rounded
+    /// `<key>` field. For used values a missing/invalid number defaults to 0; for limits it returns nil.
+    private static func parsePreciseNumber(_ entry: [String: Any], key: String, fallbackToZero: Bool = true) -> Double? {
+        if let precise = ProviderParse.number(entry["\(key)WithPrecision"]), precise.isFinite {
+            return precise
+        }
+        if let rounded = ProviderParse.number(entry[key]), rounded.isFinite {
+            return rounded
+        }
+        return fallbackToZero ? 0 : nil
     }
 
     /// Parse an ISO 8601 date string (e.g. "2026-05-01T00:00:00.000Z") or a Unix epoch value. The

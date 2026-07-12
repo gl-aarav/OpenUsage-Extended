@@ -285,11 +285,13 @@ struct WidgetData: Hashable {
             return nil
         case .dollars:
             // Mirror the original OpenUsage panel: a bounded dollar metric's secondary line reads
-            // "$<limit> limit" — no "of" prefix, and cents only when the limit isn't a whole dollar
-            // (or always when Detailed Analytics is on).
+            // "$<limit> limit" — no "of" prefix, and cents only when the limit isn't a whole dollar.
+            // Detailed Analytics keeps up to two decimals, suppressing trailing .00.
             guard let limit else { return nil }
-            let digits = DetailedAnalyticsSetting.isEnabled || limit.rounded() != limit ? 2 : 0
-            let amount = Formatters.currency(limit, fractionDigits: digits)
+            let showCents = DetailedAnalyticsSetting.isEnabled || limit.rounded() != limit
+            let amount = DetailedAnalyticsSetting.isEnabled
+                ? Formatters.currency(limit, fractionDigits: 2, minimumFractionDigits: 0)
+                : Formatters.currency(limit, fractionDigits: showCents ? 2 : 0)
             return "\(amount) \(limitNoun ?? "limit")"
         case .count:
             // The unit (e.g. "credits") shows whether the count is bounded or a plain balance.
@@ -507,7 +509,7 @@ extension WidgetData {
                 let sparePercent = ((1 - projected) * 100)
                 let spare: String
                 if DetailedAnalyticsSetting.isEnabled {
-                    spare = sparePercent.formatted(.number.precision(.fractionLength(2)).locale(Locale(identifier: "en_US")))
+                    spare = sparePercent.formatted(.number.precision(.fractionLength(0...2)).locale(Locale(identifier: "en_US")))
                 } else {
                     spare = "\(Int(sparePercent.rounded()))"
                 }

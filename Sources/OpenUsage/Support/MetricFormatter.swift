@@ -41,17 +41,17 @@ enum MetricFormatter {
             let percent = ProviderParse.clampPercent(value)
             switch style {
             case .detailed:
-                return percent.formatted(.number.precision(.fractionLength(2)).locale(locale)) + "%"
+                return percent.formatted(.number.precision(.fractionLength(0...2)).locale(locale)) + "%"
             default:
                 return "\(Int(percent.rounded()))%"
             }
         case .dollars:
             // Tray and row abbreviate four figures and up ("$1.2M", "$2.1K") so neither carries
             // "$2,059.07"; the full form (tooltips/headlines) always keeps grouped cents.
-            // Detailed analytics keeps two decimals everywhere and never abbreviates.
+            // Detailed analytics keeps up to two decimals everywhere and never abbreviates.
             switch style {
             case .detailed:
-                return Formatters.currency(value, fractionDigits: 2)
+                return Formatters.currency(value, fractionDigits: 2, minimumFractionDigits: 0)
             case .tray, .row where abs(value) >= 1000:
                 return "$" + value.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)).locale(locale))
             case .tray:
@@ -64,11 +64,11 @@ enum MetricFormatter {
         case .count:
             // Tray and row abbreviate at the thousands (token counts run into the billions); the full
             // form keeps every digit for the tooltip. Below 1,000 keeps up to one decimal either way, so
-            // a fractional balance (e.g. 820.6) survives. Detailed analytics keeps two decimals everywhere
-            // and never abbreviates.
+            // a fractional balance (e.g. 820.6) survives. Detailed analytics keeps up to two decimals
+            // everywhere and never abbreviates.
             switch style {
             case .detailed:
-                return value.formatted(.number.precision(.fractionLength(2)).locale(locale))
+                return value.formatted(.number.precision(.fractionLength(0...2)).locale(locale))
             default:
                 if style != .full, abs(value) >= 1000 {
                     return value.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)).locale(locale))
@@ -113,10 +113,10 @@ enum MetricFormatter {
     }
 
     /// Dollar-rate figure for the Cost/MTok hole — `$` plus two decimals under 1k, abbreviated above
-    /// (unless Detailed Analytics is on, which keeps two decimals and skips abbreviation).
+    /// (unless Detailed Analytics is on, which keeps up to two decimals and skips abbreviation).
     private static func costPerMtokRingPrimary(_ value: Double) -> String {
         if DetailedAnalyticsSetting.isEnabled {
-            return Formatters.currency(value, fractionDigits: 2)
+            return Formatters.currency(value, fractionDigits: 2, minimumFractionDigits: 0)
         }
         if abs(value) >= 1000 {
             return "$" + value.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)).locale(locale))
@@ -125,11 +125,11 @@ enum MetricFormatter {
     }
 
     /// Token totals put the magnitude word on the second line (`461.8` / `million`) so the hole
-    /// stays short even when the total runs past a billion. Detailed Analytics keeps two decimals
+    /// stays short even when the total runs past a billion. Detailed Analytics keeps up to two decimals
     /// and uses the raw count with a unit word instead of abbreviating.
     private static func tokenRingCenter(_ value: Double) -> TotalSpendRingCenter {
         if DetailedAnalyticsSetting.isEnabled {
-            let primary = value.formatted(.number.precision(.fractionLength(2)).locale(locale))
+            let primary = value.formatted(.number.precision(.fractionLength(0...2)).locale(locale))
             return TotalSpendRingCenter(primary: primary, unit: "tokens")
         }
         let magnitude = abs(value)

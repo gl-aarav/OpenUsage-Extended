@@ -126,13 +126,17 @@ enum MetricFormatter {
 
     /// Token totals put the magnitude word on the second line (`461.8` / `million`) so the hole
     /// stays short even when the total runs past a billion. Detailed Analytics keeps up to two decimals
-    /// and uses the raw count with a unit word instead of abbreviating.
+    /// and uses the raw count with a unit word instead of abbreviating, unless the total has eight or
+    /// more integer digits — then it falls back to the compact form so the number still fits inside the ring.
     private static func tokenRingCenter(_ value: Double) -> TotalSpendRingCenter {
-        if DetailedAnalyticsSetting.isEnabled {
-            let primary = value.formatted(.number.precision(.fractionLength(0...2)).locale(locale))
-            return TotalSpendRingCenter(primary: primary, unit: "tokens")
-        }
         let magnitude = abs(value)
+        if DetailedAnalyticsSetting.isEnabled {
+            let integerDigits = magnitude == 0 ? 1 : Int(floor(log10(magnitude))) + 1
+            if integerDigits < 8 {
+                let primary = value.formatted(.number.precision(.fractionLength(0...2)).locale(locale))
+                return TotalSpendRingCenter(primary: primary, unit: "tokens")
+            }
+        }
         if magnitude >= 1_000_000_000 {
             let scaled = value / 1_000_000_000
             return TotalSpendRingCenter(

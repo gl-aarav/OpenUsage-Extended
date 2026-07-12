@@ -315,9 +315,10 @@ struct TotalSpendRingContent: View {
     /// exact one-line forms.
     private var centerLabel: some View {
         let center = MetricFormatter.totalSpendRingCenter(projection.centerValue, metric: projection.metric)
+        let primarySize = Self.centerPrimarySize(for: center.primary)
         return VStack(spacing: 1) {
             Text(center.primary)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(size: primarySize, weight: .semibold, design: .rounded))
                 .foregroundStyle(.primary)
                 .monospacedDigit()
                 .lineLimit(1)
@@ -329,6 +330,18 @@ struct TotalSpendRingContent: View {
         }
         .padding(.horizontal, 10)
         .hoverTooltip(centerTooltip)
+    }
+
+    /// Choose a smaller base font size for the ring center when Detailed Analytics produces long
+    /// numbers (e.g. "26,841,749" tokens), while keeping the default compact forms at 13 pt.
+    private static func centerPrimarySize(for text: String) -> CGFloat {
+        guard DetailedAnalyticsSetting.isEnabled else { return 13 }
+        let length = text.count
+        if length <= 5 { return 13 }
+        if length <= 7 { return 12 }
+        if length <= 9 { return 11 }
+        if length <= 11 { return 10 }
+        return 9
     }
 
     private var centerTooltip: String {

@@ -27,6 +27,12 @@ extension View {
     func hoverTooltip(_ text: String?) -> some View {
         modifier(HoverTooltipModifier(text: text))
     }
+
+    /// Shows custom content in a hover tooltip after the same delay. The `key` is used to detect live
+    /// content changes while the cursor rests on the same target.
+    func hoverTooltip<V: View>(key: String, @ViewBuilder content: @escaping () -> V) -> some View {
+        modifier(HoverTooltipModifier(key: key, content: content))
+    }
 }
 
 /// Per-target nesting depth so a nested control's tooltip beats its container's when a hover sits in
@@ -93,6 +99,8 @@ private struct TooltipAnchorView: NSViewRepresentable {
 
 private struct HoverTooltipModifier: ViewModifier {
     let text: String?
+    let richContent: AnyView?
+    let key: String
     @Environment(\.tooltipDepth) private var depth
     @Environment(\.hoverTooltipsDisabled) private var disabled
     /// Stable per-target identity, so the presenter can track which targets are currently hovered and
@@ -103,6 +111,18 @@ private struct HoverTooltipModifier: ViewModifier {
     /// Whether the cursor is currently inside this target, so `onChange(of: resolved)` knows whether to
     /// act when the text changes without a hover event firing.
     @State private var isHovering = false
+
+    init(text: String?) {
+        self.text = text
+        self.richContent = nil
+        self.key = text ?? ""
+    }
+
+    init<V: View>(key: String, @ViewBuilder content: @escaping () -> V) {
+        self.text = nil
+        self.richContent = AnyView(content())
+        self.key = key
+    }
 
     /// `nil` (no tooltip) for a missing or blank string, collapsing the two "absent" cases.
     private var resolved: String? {
@@ -147,6 +167,7 @@ private struct HoverTooltipModifier: ViewModifier {
             // state on its 30s tick), with no hover event to react to — reconcile so the bubble updates
             // or clears.
             .onChange(of: resolved) { syncPresenter() }
+            .onChange(of: key) { syncPresenter() }
             // A row can be torn down (scroll, screen switch, popover close) without an `.ended`, so
             // clear our entry here too or the panel could linger.
             .onDisappear {
@@ -155,12 +176,14 @@ private struct HoverTooltipModifier: ViewModifier {
             }
     }
 
-    /// Reflect the current hover state into the presenter: show this target's text while hovered, drop
-    /// it when there's no text. A no-op when not hovered (so a text change off-hover does nothing).
+    /// Reflect the current hover state into the presenter: show this target's text or rich content while
+    /// hovered, drop it when there's nothing to show. A no-op when not hovered.
     private func syncPresenter() {
         guard isHovering else { return }
         if let resolved {
             TooltipPresenter.shared.enter(id: id, text: resolved, depth: depth, anchor: anchor)
+        } else if let richContent {
+            TooltipPresenter.shared.enter(id: id, content: { richContent }, key: key, depth: depth, anchor: anchor)
         } else {
             TooltipPresenter.shared.exit(id: id)
         }
@@ -174,7 +197,9 @@ private final class TooltipPresenter {
     static let shared = TooltipPresenter()
 
     private struct Target {
-        let text: String
+        let text: String?
+        let richContent: AnyView?
+        let key: String
         let depth: Int
         let anchor: TooltipAnchor
     }
@@ -182,10 +207,10 @@ private final class TooltipPresenter {
     /// Targets the cursor is currently inside. More than one only while a hover sits in both a child
     /// and its container; the deepest wins.
     private var active: [UUID: Target] = [:]
-    /// The target currently on screen (and its text, to detect a live text change), and the one a
+    /// The target currently on screen (and its key, to detect a live content change), and the one a
     /// pending reveal is scheduled for.
     private var shownID: UUID?
-    private var shownText: String?
+    private var shownKey: String?
     private var pendingID: UUID?
     private var revealTask: Task<Void, Never>?
 
@@ -247,7 +272,13 @@ private final class TooltipPresenter {
     }
 
     func enter(id: UUID, text: String, depth: Int, anchor: TooltipAnchor) {
-        active[id] = Target(text: text, depth: depth, anchor: anchor)
+        active[id] = Target(text: text, richContent: nil, key: text, depth: depth, anchor: anchor)
+        refresh()
+    }
+
+    func enter<V: View>(id: UUID, @ViewBuilder content: () -> V, key: String, depth: Int, anchor: TooltipAnchor) {
+        let bubble = AnyView(TooltipBubble(content: content, maxTextWidth: nil))
+        active[id] = Target(text: nil, richContent: bubble, key: key, depth: depth, anchor: anchor)
         refresh()
     }
 
@@ -275,9 +306,9 @@ private final class TooltipPresenter {
             return
         }
         if shownID == top.key {                     // already the right target on screen
-            if shownText != top.value.text {        // its text changed live — re-present, don't reposition away
+            if shownKey != top.value.key {          // its content changed live — re-present, don't reposition away
                 present(top.value)
-                shownText = top.value.text
+                shownKey = top.value.key
             }
             return
         }
@@ -288,7 +319,7 @@ private final class TooltipPresenter {
         if let shownID, let shown = active[shownID], top.value.depth > shown.depth {
             present(top.value)
             self.shownID = top.key
-            shownText = top.value.text
+            shownKey = top.value.key
             cancelPending()
             return
         }
@@ -309,7 +340,7 @@ private final class TooltipPresenter {
             guard !Task.isCancelled, let self else { return }
             self.present(target)
             self.shownID = id
-            self.shownText = target.text
+            self.shownKey = target.key
             self.pendingID = nil
             self.revealTask = nil
         }
@@ -323,7 +354,7 @@ private final class TooltipPresenter {
 
     private func hide() {
         shownID = nil
-        shownText = nil
+        shownKey = nil
         if panel.isVisible { panel.orderOut(nil) }
     }
 
@@ -349,8 +380,15 @@ private final class TooltipPresenter {
     /// (there's no public `Text` API for it). A handful of extra layout passes, only at reveal time.
     /// Leaves `host.rootView` holding whichever bubble it settled on, which is the one shown.
     private func measuredSize(for target: Target) -> CGSize {
+        // Rich-content tooltips size to their natural content; wrapping is handled by the supplied view.
+        if let richContent = target.richContent {
+            host.rootView = richContent
+            host.layoutSubtreeIfNeeded()
+            return host.fittingSize
+        }
+        guard let text = target.text else { return .zero }
         func fit(maxTextWidth: CGFloat?) -> CGSize {
-            host.rootView = AnyView(TooltipBubble(text: target.text, maxTextWidth: maxTextWidth))
+            host.rootView = AnyView(TooltipBubble(text: text, maxTextWidth: maxTextWidth))
             host.layoutSubtreeIfNeeded()
             return host.fittingSize
         }
@@ -416,13 +454,29 @@ private final class NonKeyPanel: NSPanel {
 /// the tooltip matches it rather than sampling glass). Sizes to its content (`fittingSize` drives the
 /// panel size); the panel's window shadow supplies the drop shadow.
 private struct TooltipBubble: View {
-    let text: String
-    /// When set, the text wraps to this width (long tooltips); `nil` keeps it a snug single line.
+    let content: AnyView
+    /// When set, the text wraps to this width (long text tooltips); `nil` keeps the content at its
+    /// natural size.
     let maxTextWidth: CGFloat?
 
-    /// Inner horizontal padding around the text. `TooltipPresenter` subtracts it when deriving the
+    /// Inner horizontal padding around the content. `TooltipPresenter` subtracts it when deriving the
     /// text wrap width from the bubble's max width.
     static let horizontalPadding: CGFloat = 8
+
+    init(text: String, maxTextWidth: CGFloat?) {
+        self.maxTextWidth = maxTextWidth
+        self.content = AnyView(
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+        )
+    }
+
+    init<V: View>(@ViewBuilder content: () -> V, maxTextWidth: CGFloat?) {
+        self.maxTextWidth = maxTextWidth
+        self.content = AnyView(content())
+    }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -435,10 +489,6 @@ private struct TooltipBubble: View {
 
     @ViewBuilder
     private var label: some View {
-        let content = Text(text)
-            .font(.system(size: 12))
-            .foregroundStyle(.primary)
-            .multilineTextAlignment(.center)
         if let maxTextWidth {
             // A fixed width (not `maxWidth`) so the wrapped height measures deterministically via
             // `fittingSize`; `fixedSize(vertical:)` pins the bubble to that ideal wrapped height.

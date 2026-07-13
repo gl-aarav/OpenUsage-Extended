@@ -92,6 +92,33 @@ struct TotalSpendTrendDetail: View {
         .onContinuousHover { phase in
             if case .active = phase { activeIndex = index }
         }
+        .hoverTooltip(key: day.label) {
+            tooltipContent(for: day)
+        }
+    }
+
+    private func tooltipContent(for day: TotalSpendTrendDay) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("\(day.label) · \(MetricFormatter.number(day.total, kind: .count, style: .row)) tokens")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+            ForEach(day.segments) { segment in
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(TotalSpendPalette.color(for: segment.providerID))
+                        .frame(width: 7, height: 7)
+                    Text(segment.providerName)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(MetricFormatter.number(segment.value, kind: .count, style: .row))
+                        .font(.system(size: 11))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .fixedSize()
     }
 
     private var axis: some View {
@@ -171,6 +198,16 @@ struct TotalSpendTrendInline: View {
         }
     }
 
+    /// The hovered day's total, or the peak when nothing is hovered. The per-provider breakdown now
+    /// lives in the hover tooltip.
+    private var readout: String {
+        if let activeIndex, days.indices.contains(activeIndex) {
+            return "\(days[activeIndex].label) · \(MetricFormatter.number(days[activeIndex].total, kind: .count, style: .row)) tokens"
+        }
+        if let peakIndex { return "peak \(MetricFormatter.number(days[peakIndex].total, kind: .count, style: .row)) tokens" }
+        return ""
+    }
+
     private var chart: some View {
         let maxValue = max(1, days.map(\.total).max() ?? 1)
         return HStack(alignment: .bottom, spacing: 1) {
@@ -198,6 +235,33 @@ struct TotalSpendTrendInline: View {
         .onContinuousHover { phase in
             if case .active = phase { activeIndex = index }
         }
+        .hoverTooltip(key: day.label) {
+            tooltipContent(for: day)
+        }
+    }
+
+    private func tooltipContent(for day: TotalSpendTrendDay) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("\(day.label) · \(MetricFormatter.number(day.total, kind: .count, style: .row)) tokens")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+            ForEach(day.segments) { segment in
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(TotalSpendPalette.color(for: segment.providerID))
+                        .frame(width: 7, height: 7)
+                    Text(segment.providerName)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(MetricFormatter.number(segment.value, kind: .count, style: .row))
+                        .font(.system(size: 11))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .fixedSize()
     }
 
     private var axis: some View {
@@ -228,15 +292,6 @@ struct TotalSpendTrendInline: View {
     }
 
     private var peakIndex: Int? { days.indices.max { days[$0].total < days[$1].total } }
-
-    /// The hovered day, or the peak when nothing is hovered.
-    private var readout: String {
-        if let activeIndex, days.indices.contains(activeIndex) {
-            return "\(days[activeIndex].label) · \(MetricFormatter.number(days[activeIndex].total, kind: .count, style: .row)) tokens"
-        }
-        if let peakIndex { return "peak \(MetricFormatter.number(days[peakIndex].total, kind: .count, style: .row)) tokens" }
-        return ""
-    }
 
     private func barHeight(_ value: Double, max maxValue: Double) -> CGFloat {
         guard value > 0 else { return 0 }

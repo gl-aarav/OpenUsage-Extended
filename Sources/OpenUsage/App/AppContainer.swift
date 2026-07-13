@@ -64,7 +64,7 @@ final class AppContainer {
             DevinProvider(),
             GrokProvider(),
             KiroProvider(),
-            OpenCodeGoProvider(),
+            OpenCodeProvider(),
             OpenRouterProvider(),
             ZAIProvider()
         ]

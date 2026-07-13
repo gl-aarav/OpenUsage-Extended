@@ -65,7 +65,7 @@ struct TotalSpendTrendDetail: View {
 
     private var chart: some View {
         let maxValue = max(1, days.map(\.total).max() ?? 1)
-        return HStack(alignment: .bottom, spacing: 2) {
+        return HStack(alignment: .bottom, spacing: 1) {
             ForEach(days.indices, id: \.self) { index in
                 dayColumn(day: days[index], index: index, maxValue: maxValue)
             }
@@ -80,12 +80,13 @@ struct TotalSpendTrendDetail: View {
     private func dayColumn(day: TotalSpendTrendDay, index: Int, maxValue: Double) -> some View {
         VStack(spacing: 0) {
             ForEach(day.segments) { segment in
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                Rectangle()
                     .fill(TotalSpendPalette.color(for: segment.providerID))
                     .frame(height: barHeight(segment.value, max: maxValue))
                     .opacity(activeIndex == nil || activeIndex == index ? 1 : 0.35)
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: 1.5, style: .continuous))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .contentShape(Rectangle())
         .onContinuousHover { phase in
@@ -172,7 +173,7 @@ struct TotalSpendTrendInline: View {
 
     private var chart: some View {
         let maxValue = max(1, days.map(\.total).max() ?? 1)
-        return HStack(alignment: .bottom, spacing: 2) {
+        return HStack(alignment: .bottom, spacing: 1) {
             ForEach(days.indices, id: \.self) { index in
                 dayColumn(day: days[index], index: index, maxValue: maxValue)
             }
@@ -185,12 +186,13 @@ struct TotalSpendTrendInline: View {
     private func dayColumn(day: TotalSpendTrendDay, index: Int, maxValue: Double) -> some View {
         VStack(spacing: 0) {
             ForEach(day.segments) { segment in
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                Rectangle()
                     .fill(TotalSpendPalette.color(for: segment.providerID))
                     .frame(height: barHeight(segment.value, max: maxValue))
                     .opacity(activeIndex == nil || activeIndex == index ? 1 : 0.35)
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: 1.5, style: .continuous))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .contentShape(Rectangle())
         .onContinuousHover { phase in

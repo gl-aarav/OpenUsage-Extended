@@ -25,6 +25,8 @@ struct TotalSpendCard: View {
     /// The pending revert, kept so a rapid second click restarts the window instead of cutting the
     /// fresh checkmark short.
     @State private var shareRevertTask: Task<Void, Never>?
+    /// Whether the inline 30-day trend chart is expanded below the ring.
+    @State private var isTrendExpanded = true
 
     private var period: TotalSpendPeriod {
         TotalSpendPeriod(rawValue: periodRawValue) ?? .today
@@ -47,6 +49,42 @@ struct TotalSpendCard: View {
 
     private var projection: TotalSpendProjection {
         total.projection(for: metric)
+    }
+
+    /// Per-provider, per-day token data for the 30-day stacked trend detail. Each provider's
+    /// "Usage Trend" chart already carries the daily token counts, so we align them by day label and
+    /// stack the segments by total contribution across the window.
+    private var trendDays: [TotalSpendTrendDay] {
+        let providerData: [(Provider, [MetricChartPoint])] = providers.compactMap { provider in
+            guard let snapshot = dataStore.snapshots[provider.id],
+                  let line = snapshot.line(label: "Usage Trend"),
+                  case .chart(_, let points, _) = line,
+                  !points.isEmpty else { return nil }
+            return (provider, points)
+        }
+        guard let first = providerData.first else { return [] }
+
+        let totals = providerData.reduce(into: [String: Double]()) { result, pair in
+            result[pair.0.id] = pair.1.reduce(0) { $0 + $1.value }
+        }
+
+        var valuesByDay: [String: [TotalSpendTrendSegment]] = [:]
+        for (provider, points) in providerData {
+            for point in points where point.value > 0 {
+                valuesByDay[point.label, default: []].append(
+                    TotalSpendTrendSegment(providerID: provider.id,
+                                           providerName: provider.displayName,
+                                           value: point.value)
+                )
+            }
+        }
+
+        return first.1.map { point in
+            var segments = valuesByDay[point.label, default: []]
+            segments.sort { (totals[$0.providerID] ?? 0) > (totals[$1.providerID] ?? 0) }
+            let total = segments.reduce(0) { $0 + $1.value }
+            return TotalSpendTrendDay(label: point.label, segments: segments, total: total)
+        }
     }
 
     var body: some View {
@@ -153,6 +191,13 @@ struct TotalSpendCard: View {
                 emptyState
             } else {
                 TotalSpendRingContent(projection: projection)
+                if period == .last30, !trendDays.isEmpty {
+                    trendToggleButton
+                    if isTrendExpanded {
+                        TotalSpendTrendInline(days: trendDays)
+                            .transition(.opacity)
+                    }
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -171,6 +216,22 @@ struct TotalSpendCard: View {
                 )
             }
         }
+    }
+
+    /// Bottom arrow that expands/collapses the inline 30-day stacked trend chart.
+    private var trendToggleButton: some View {
+        Button {
+            withAnimation(Motion.spring) {
+                isTrendExpanded.toggle()
+            }
+        } label: {
+            Image(systemName: isTrendExpanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 14, height: 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// A capsule segmented switcher in the app's own design language (the footer's glass capsule

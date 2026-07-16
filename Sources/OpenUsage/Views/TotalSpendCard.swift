@@ -20,11 +20,6 @@ struct TotalSpendCard: View {
     @AppStorage("openusage.totalSpend.metric") private var metricRawValue = TotalSpendMetric.cost.rawValue
     @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
 
-    /// True briefly after a successful copy: the share arrow becomes a checkmark, then reverts.
-    @State private var shareCopied = false
-    /// The pending revert, kept so a rapid second click restarts the window instead of cutting the
-    /// fresh checkmark short.
-    @State private var shareRevertTask: Task<Void, Never>?
     /// Whether the inline 30-day trend chart is expanded below the ring.
     @State private var isTrendExpanded = true
 
@@ -51,40 +46,78 @@ struct TotalSpendCard: View {
         total.projection(for: metric)
     }
 
-    /// Per-provider, per-day token data for the 30-day stacked trend detail. Each provider's
-    /// "Usage Trend" chart already carries the daily token counts, so we align them by day label and
-    /// stack the segments by total contribution across the window.
+    /// Per-provider, per-day data for the 30-day stacked trend detail. The values come from each
+    /// provider's raw `usageHistory`, so the chart reflects the selected metric: cost dollars, tokens,
+    /// or cost per million tokens.
     private var trendDays: [TotalSpendTrendDay] {
-        let providerData: [(Provider, [MetricChartPoint])] = providers.compactMap { provider in
-            guard let snapshot = dataStore.snapshots[provider.id],
-                  let line = snapshot.line(label: "Usage Trend"),
-                  case .chart(_, let points, _) = line,
-                  !points.isEmpty else { return nil }
-            return (provider, points)
-        }
-        guard let first = providerData.first else { return [] }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let offsets = (0...UsageHistoryWindow.previousDays).reversed()
 
-        let totals = providerData.reduce(into: [String: Double]()) { result, pair in
-            result[pair.0.id] = pair.1.reduce(0) { $0 + $1.value }
-        }
+        let providerDays: [(provider: Provider, days: [(label: String, value: Double)])] = providers.compactMap { provider -> (provider: Provider, days: [(label: String, value: Double)])? in
+            guard let series = dataStore.snapshots[provider.id]?.usageHistory?.series.daily else { return nil }
 
-        var valuesByDay: [String: [TotalSpendTrendSegment]] = [:]
-        for (provider, points) in providerData {
-            for point in points where point.value > 0 {
-                valuesByDay[point.label, default: []].append(
-                    TotalSpendTrendSegment(providerID: provider.id,
-                                           providerName: provider.displayName,
-                                           value: point.value)
-                )
+            var valuesByKey: [String: Double] = [:]
+            for entry in series {
+                guard let key = trendDayKey(entry.date) else { continue }
+                valuesByKey[key] = trendValue(for: entry)
             }
+
+            let days: [(label: String, value: Double)] = offsets.compactMap { offset -> (label: String, value: Double)? in
+                guard let date = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
+                let key = DailyUsageAccumulator.dayKey(from: date, calendar: calendar)
+                let label = Formatters.monthDayLabel(date)
+                return (label, valuesByKey[key] ?? 0)
+            }
+            guard days.contains(where: { $0.value > 0 }) else { return nil }
+            return (provider, days)
+        }
+        guard let first = providerDays.first else { return [] }
+
+        let totals = providerDays.reduce(into: [String: Double]()) { result, pair in
+            result[pair.provider.id] = pair.days.reduce(0) { $0 + $1.value }
         }
 
-        return first.1.map { point in
-            var segments = valuesByDay[point.label, default: []]
+        return first.days.indices.map { index in
+            var segments: [TotalSpendTrendSegment] = []
+            for (provider, days) in providerDays {
+                let value = days[index].value
+                guard value > 0 else { continue }
+                segments.append(TotalSpendTrendSegment(providerID: provider.id,
+                                                       providerName: provider.displayName,
+                                                       value: value))
+            }
             segments.sort { (totals[$0.providerID] ?? 0) > (totals[$1.providerID] ?? 0) }
             let total = segments.reduce(0) { $0 + $1.value }
-            return TotalSpendTrendDay(label: point.label, segments: segments, total: total)
+            return TotalSpendTrendDay(label: first.days[index].label, segments: segments, total: total)
         }
+    }
+
+    private func trendValue(for entry: DailyUsageEntry) -> Double {
+        switch metric {
+        case .tokens:
+            return Double(entry.totalTokens)
+        case .cost:
+            return entry.costUSD ?? 0
+        case .costPerMtok:
+            guard entry.totalTokens > 0, let cost = entry.costUSD, cost > 0 else { return 0 }
+            return (cost / Double(entry.totalTokens)) * 1_000_000
+        }
+    }
+
+    private func trendDayKey(_ rawDate: String) -> String? {
+        let value = rawDate.trimmingCharacters(in: .whitespaces)
+        guard !value.isEmpty else { return nil }
+        if value.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil {
+            return value
+        }
+        if let date = OpenUsageISO8601.date(from: value) {
+            return DailyUsageAccumulator.dayKey(from: date)
+        }
+        if let match = value.range(of: #"^\d{4}-\d{2}-\d{2}"#, options: .regularExpression) {
+            return String(value[match])
+        }
+        return nil
     }
 
     var body: some View {
@@ -153,33 +186,14 @@ struct TotalSpendCard: View {
     }
 
     private var shareButton: some View {
-        Button {
-            // The checkmark only appears when the PNG actually landed on the pasteboard — a failed
-            // render/copy beeps (inside the renderer) and the icon stays a share arrow.
-            guard ShareCardRenderer.shareTotalSpend(
+        CopyFeedbackButton(accessibilityLabel: "Share \(metric.title) Screenshot") {
+            ShareCardRenderer.shareTotalSpend(
                 total: total,
                 metric: metric,
                 appearance: colorScheme,
                 layout: layout
-            ) else { return }
-            withAnimation(Motion.spring) { shareCopied = true }
-            shareRevertTask?.cancel()
-            shareRevertTask = Task {
-                try? await Task.sleep(for: .seconds(1.4))
-                guard !Task.isCancelled else { return }
-                withAnimation(Motion.spring) { shareCopied = false }
-            }
-        } label: {
-            ShareFeedbackIcon(copied: shareCopied)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                // Same height as the provider headers' trailing mark, so the header row measures the
-                // same and the arrow centers vertically exactly like the provider icons do.
-                .frame(width: 16, height: density.headerIconSize)
-                .contentShape(Rectangle())
+            )
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Share \(metric.title) Screenshot")
     }
 
     // MARK: - Card
@@ -194,7 +208,7 @@ struct TotalSpendCard: View {
                 if period == .last30, !trendDays.isEmpty {
                     trendToggleButton
                     if isTrendExpanded {
-                        TotalSpendTrendInline(days: trendDays)
+                        TotalSpendTrendInline(days: trendDays, metric: metric)
                             .transition(.opacity)
                     }
                 }

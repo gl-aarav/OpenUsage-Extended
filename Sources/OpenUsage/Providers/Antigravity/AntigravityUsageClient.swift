@@ -34,8 +34,8 @@ struct AntigravityUsageClient: Sendable {
     // clients Google does not treat the "secret" as confidential (it ships in every copy of the client),
     // so committing it here is an intentional, accepted trade-off, not a leaked private key. It's required
     // for the refresh-token grant — without it we can't refresh the keychain token when the app is closed.
-    static let googleClientID = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
-    static let googleClientSecret = "YOUR_ANTIGRAVITY_CLIENT_SECRET"
+    static let googleClientID = "PLACEHOLDER_CLIENT_ID"
+    static let googleClientSecret = "PLACEHOLDER_CLIENT_SECRET"
     static let lsMetadata = ["ideName": "antigravity", "extensionName": "antigravity", "ideVersion": "unknown", "locale": "en"]
 
     /// Loopback session that trusts the LS's self-signed cert; remote calls use full validation.

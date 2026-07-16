@@ -52,7 +52,7 @@ enum MetricFormatter {
             switch style {
             case .detailed:
                 return Formatters.currency(value, fractionDigits: 2, minimumFractionDigits: 0)
-            case .tray, .row where abs(value) >= 1000:
+            case .tray where abs(value) >= 1000, .row where abs(value) >= 1000:
                 return "$" + value.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)).locale(locale))
             case .tray:
                 // Shortest below $1k: whole dollars ("$130").

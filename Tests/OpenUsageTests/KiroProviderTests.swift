@@ -4,7 +4,7 @@ import XCTest
 final class KiroUsageMapperTests: XCTestCase {
 
     func testMapsCreditsWithEpochSecondsResetDate() throws {
-        let augustFirst2026Seconds = 1_776_192_000.0
+        let augustFirst2026Seconds = 1_785_542_400.0
         let body = try makeUsageBody(
             subscriptionTitle: "KIRO PRO",
             usageBreakdownList: [
@@ -18,7 +18,9 @@ final class KiroUsageMapperTests: XCTestCase {
         XCTAssertEqual(credits?.used, 200)
         XCTAssertNotNil(credits?.resetsAt)
         if let resetsAt = credits?.resetsAt {
-            let components = Calendar.current.dateComponents([.year, .month, .day], from: resetsAt)
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(abbreviation: "UTC")!
+            let components = calendar.dateComponents([.year, .month, .day], from: resetsAt)
             XCTAssertEqual(components.year, 2026)
             XCTAssertEqual(components.month, 8)
             XCTAssertEqual(components.day, 1)

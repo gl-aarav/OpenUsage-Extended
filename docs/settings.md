@@ -6,11 +6,19 @@ Settings lives inside the popover — there is no separate window. Open it from 
 
 | Setting | Options | What it does |
 |---|---|---|
-| Show Total Spend | on/off | Whether the cross-provider [Total Spend](dashboard.md#total-spend) card shows at the top of the dashboard. On by default; the card appears whenever at least one enabled provider tracks spend (Claude, Codex, Cursor, Grok). |
+| Show Total Spend | on/off | Whether the cross-provider [Total Spend](dashboard.md#total-spend) card shows at the top of the dashboard. On by default; the card appears whenever at least one enabled provider tracks spend (Claude, Codex, Cursor, Grok, OpenCode). |
 | Launch at Login | on/off | Registers the app as a login item (the system's login-item registry is the source of truth). |
 | Global Shortcut | record a shortcut | Global shortcut that toggles the popover from anywhere. Click the field and press a combo; the ⓧ clears it and disables the shortcut. |
 
 **Upgrading from the legacy (pre-0.7) edition:** the old edition managed start-on-login with its own launcher file, which an in-place update left behind. That leftover could start the app a second time at every login and showed up in System Settings → Login Items under the signing company's name ("SUNSTORY LLC") instead of OpenUsage. The app now removes it automatically on launch — only when the file verifiably points at OpenUsage itself — so login starts exactly one copy, controlled by the Launch at Login toggle above.
+
+## iCloud Sync
+
+**Sync Across Macs** is off by default. Turning it on shares normalized OpenUsage history through the
+app's private iCloud container and combines machine-local tokens and spend across Macs signed into the
+same iCloud account. Settings shows the five-minute write cadence and each Mac's relative **Updated**
+time; it also reports unavailable iCloud, loading, write, and malformed-file states. See
+[iCloud Sync](icloud-sync.md) for what is included and which surfaces use the combined values.
 
 ## Appearance
 
@@ -20,7 +28,7 @@ Settings lives inside the popover — there is no separate window. Open it from 
 | Theme | System / Light / Dark | App-wide appearance override for the popover. |
 | Density | Default / Compact | Default breathes; Compact is a real information-dense mode — text steps down one size, rows and provider sections pull together, and Customize / Settings rows tighten with them. In both, consecutive one-line metrics (Today / Yesterday / …) pull together; Compact pulls harder. |
 | Time Format | Auto / 12-hour / 24-hour | How exact times read (e.g. "Resets today at 6:38 PM" vs "18:38"). Auto follows the system. |
-| Increase Transparency | Off / On | Off (default) keeps the popover a solid panel. On makes it translucent so your desktop shows through, while keeping the numbers legible. It pauses automatically when you have the macOS **Reduce Transparency** or **Increase Contrast** accessibility setting turned on (a note explains why), so it never works against those preferences. |
+| Increase Transparency | Off / On | Off (default) keeps the popover a solid panel. On makes it translucent so your desktop shows through, while keeping the numbers and Options control legible with adaptive frosted surfaces. It pauses automatically when you have the macOS **Reduce Transparency** or **Increase Contrast** accessibility setting turned on (a note explains why), so it never works against those preferences. |
 
 ## Usage Display
 
@@ -48,6 +56,7 @@ All three alerts default off. The first time you turn one on, OpenUsage asks for
 
 | Setting | Options | What it does |
 |---|---|---|
+| Hide From Screen Share | On / Off | Off (default). On replaces the menu bar strip with the OpenUsage icon and wordmark while your screen is being shared or recorded, and restores your starred metrics the moment the capture ends. See [Menu bar](menu-bar.md#hiding-usage-while-screen-sharing). |
 | Share Anonymous Usage | On / Off | On (default) shares anonymous, daily usage summaries — no account details, credentials, or usage values. Off stops all sharing immediately. See [Privacy & Usage Data](privacy.md) for exactly what is and isn't sent. |
 
 ## Advanced

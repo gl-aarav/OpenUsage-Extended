@@ -6,6 +6,16 @@ import XCTest
 /// when nothing is pinned.
 @MainActor
 final class MenuBarContentTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        DetailedAnalyticsSetting.isEnabledOverride = false
+    }
+
+    override func tearDown() {
+        DetailedAnalyticsSetting.isEnabledOverride = nil
+        super.tearDown()
+    }
+
     func testEmptyWhenNoGroups() {
         let content = MenuBarContentBuilder.build(groups: [], data: { $0.sample })
         XCTAssertTrue(content.isEmpty)

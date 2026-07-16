@@ -21,6 +21,7 @@ struct TotalSpendTrendDay: Identifiable, Equatable {
 /// it and swaps the header readout to that day's total.
 struct TotalSpendTrendDetail: View {
     let days: [TotalSpendTrendDay]
+    let metric: TotalSpendMetric
     /// Reports whether the cursor is inside the popover, so the trigger can keep it open while the user
     /// moves from the segment into the chart, and close it once they leave both.
     var onHoverChange: (Bool) -> Void = { _ in }
@@ -52,7 +53,7 @@ struct TotalSpendTrendDetail: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("30 Day Tokens")
+            Text(chartTitle)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary)
             Spacer(minLength: 8)
@@ -99,7 +100,7 @@ struct TotalSpendTrendDetail: View {
 
     private func tooltipContent(for day: TotalSpendTrendDay) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("\(day.label) · \(MetricFormatter.number(day.total, kind: .count, style: .row)) tokens")
+            Text("\(day.label) · \(valueText(day.total))")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.primary)
             ForEach(day.segments) { segment in
@@ -111,7 +112,7 @@ struct TotalSpendTrendDetail: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(MetricFormatter.number(segment.value, kind: .count, style: .row))
+                    Text(valueText(segment.value))
                         .font(.system(size: 11))
                         .monospacedDigit()
                         .foregroundStyle(.primary)
@@ -148,14 +149,30 @@ struct TotalSpendTrendDetail: View {
         }
     }
 
+    private var chartTitle: String {
+        switch metric {
+        case .cost: return "30 Day Cost"
+        case .costPerMtok: return "30 Day Cost/MTok"
+        case .tokens: return "30 Day Tokens"
+        }
+    }
+
+    private func valueText(_ value: Double) -> String {
+        switch metric {
+        case .cost: return MetricFormatter.number(value, kind: .dollars, style: .row)
+        case .costPerMtok: return MetricFormatter.costPerMtok(value, style: .row)
+        case .tokens: return MetricFormatter.number(value, kind: .count, style: .row) + " tokens"
+        }
+    }
+
     private var peakIndex: Int? { days.indices.max { days[$0].total < days[$1].total } }
 
     /// The hovered day, or the peak when nothing is hovered — the one figure the bars can't label.
     private var readout: String {
         if let activeIndex, days.indices.contains(activeIndex) {
-            return "\(days[activeIndex].label) · \(MetricFormatter.number(days[activeIndex].total, kind: .count, style: .row)) tokens"
+            return "\(days[activeIndex].label) · \(valueText(days[activeIndex].total))"
         }
-        if let peakIndex { return "peak \(MetricFormatter.number(days[peakIndex].total, kind: .count, style: .row)) tokens" }
+        if let peakIndex { return "peak \(valueText(days[peakIndex].total))" }
         return ""
     }
 
@@ -169,6 +186,7 @@ struct TotalSpendTrendDetail: View {
 /// Matches the Usage Trend row layout: header, full-width stacked bar chart, axis, and provider legend.
 struct TotalSpendTrendInline: View {
     let days: [TotalSpendTrendDay]
+    let metric: TotalSpendMetric
 
     @State private var activeIndex: Int?
 
@@ -186,7 +204,7 @@ struct TotalSpendTrendInline: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("30 Day Tokens")
+            Text(chartTitle)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary)
             Spacer(minLength: 8)
@@ -198,13 +216,29 @@ struct TotalSpendTrendInline: View {
         }
     }
 
+    private var chartTitle: String {
+        switch metric {
+        case .cost: return "30 Day Cost"
+        case .costPerMtok: return "30 Day Cost/MTok"
+        case .tokens: return "30 Day Tokens"
+        }
+    }
+
+    private func valueText(_ value: Double) -> String {
+        switch metric {
+        case .cost: return MetricFormatter.number(value, kind: .dollars, style: .row)
+        case .costPerMtok: return MetricFormatter.costPerMtok(value, style: .row)
+        case .tokens: return MetricFormatter.number(value, kind: .count, style: .row) + " tokens"
+        }
+    }
+
     /// The hovered day's total, or the peak when nothing is hovered. The per-provider breakdown now
     /// lives in the hover tooltip.
     private var readout: String {
         if let activeIndex, days.indices.contains(activeIndex) {
-            return "\(days[activeIndex].label) · \(MetricFormatter.number(days[activeIndex].total, kind: .count, style: .row)) tokens"
+            return "\(days[activeIndex].label) · \(valueText(days[activeIndex].total))"
         }
-        if let peakIndex { return "peak \(MetricFormatter.number(days[peakIndex].total, kind: .count, style: .row)) tokens" }
+        if let peakIndex { return "peak \(valueText(days[peakIndex].total))" }
         return ""
     }
 
@@ -242,7 +276,7 @@ struct TotalSpendTrendInline: View {
 
     private func tooltipContent(for day: TotalSpendTrendDay) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("\(day.label) · \(MetricFormatter.number(day.total, kind: .count, style: .row)) tokens")
+            Text("\(day.label) · \(valueText(day.total))")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.primary)
             ForEach(day.segments) { segment in
@@ -254,7 +288,7 @@ struct TotalSpendTrendInline: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(MetricFormatter.number(segment.value, kind: .count, style: .row))
+                    Text(valueText(segment.value))
                         .font(.system(size: 11))
                         .monospacedDigit()
                         .foregroundStyle(.primary)

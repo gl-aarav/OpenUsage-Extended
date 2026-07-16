@@ -26,6 +26,9 @@ struct WidgetRowView: View {
 
     @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
     @State private var modelHover = HoverPopoverState()
+    /// Backs the resets popover's claim flow; `nil` outside the live dashboard (previews, share
+    /// renders), which renders the timeline read-only.
+    @Environment(\.codexResetClaim) private var codexResetClaim
     /// Party easter egg: fill meter bars with the party gradient instead of the severity color. Off by
     /// default everywhere else.
     @Environment(\.popoverPartyMode) private var partyMode
@@ -146,13 +149,13 @@ struct WidgetRowView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .hoverTooltip(state.tooltip)
+                .hoverTooltip(data.pacingTooltip(for: state))
         case .healthy where data.alwaysShowPacing:
             // "Always show pacing" surfaces the projection on the otherwise-silent on-track row: the
             // same quiet secondary note as the amber case, but the cushion ("~33% left at reset")
             // rather than the spare. No flame (blue isn't a warning) and no hover tooltip — the copy
             // already *is* the projection the amber case hides in its tooltip.
-            if let projection = state.tooltip {
+            if let projection = data.pacingTooltip(for: state) {
                 Spacer(minLength: 8)
                 Text(projection)
                     .font(supportingFont)
@@ -186,7 +189,7 @@ struct WidgetRowView: View {
             }
         }
         .foregroundStyle(.secondary)
-        .hoverTooltip(state.tooltip)
+        .hoverTooltip(data.pacingTooltip(for: state))
         .accessibilityLabel(accessibility)
 
         if let action {
@@ -260,8 +263,13 @@ struct WidgetRowView: View {
         unboundedRowContent
             .onChange(of: data.modelBreakdown) { _, _ in modelHover.dismiss() }
             // A refresh can replace the reset credits (count and expiries) while the popover is open;
-            // drop it so it never lingers over a stale timeline.
-            .onChange(of: data.expiriesAt) { _, _ in modelHover.dismiss() }
+            // drop it so it never lingers over a stale timeline — except while the claim flow has the
+            // popover pinned: the claim's own forced refresh is what changes the credits, and dismissing
+            // on it would close the popover before the claim's result banner ever renders. The pinned
+            // popover re-renders from the new data instead (the detail view reconciles its own state).
+            .onChange(of: data.expiriesAt) { _, _ in
+                if !modelHover.isPinned { modelHover.dismiss() }
+            }
             .onDisappear { modelHover.dismiss() }
     }
 
@@ -361,10 +369,19 @@ struct WidgetRowView: View {
                         modelHover.detailHover(inside)
                     }
                 } else if data.showsResetExpiries {
-                    RateLimitResetsDetail(title: data.title, count: data.resetCreditCount,
-                                          expiries: data.expiriesAt) { inside in
-                        modelHover.detailHover(inside)
-                    }
+                    RateLimitResetsDetail(
+                        count: data.resetCreditCount, expiries: data.expiriesAt,
+                        onHoverChange: { inside in modelHover.detailHover(inside) },
+                        onPinChange: { pinned in modelHover.setPinned(pinned) },
+                        // Rows with reset expiries are Codex-only today, so the Codex claim service is
+                        // the right backing; absent from the environment (previews, share renders) the
+                        // timeline is read-only.
+                        claim: codexResetClaim.map { service in
+                            { expiry, redeemRequestID in
+                                await service.claim(creditExpiringAt: expiry, redeemRequestID: redeemRequestID)
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -456,7 +473,7 @@ struct WidgetRowView: View {
         .frame(height: density.meterHeight)
         .animation(Motion.spring, value: data.fraction)
         .accessibilityHidden(true)
-        .hoverTooltip(state.tooltip)
+        .hoverTooltip(data.pacingTooltip(for: state))
     }
 
     private static let paceTickWidth: CGFloat = 2

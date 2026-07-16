@@ -5,7 +5,14 @@ import Foundation
 enum DetailedAnalyticsSetting {
     static let key = "detailedAnalytics"
 
+    #if DEBUG
+    nonisolated(unsafe) static var isEnabledOverride: Bool? = nil
+    #endif
+
     static var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: key, default: false)
+        #if DEBUG
+        if let override = isEnabledOverride { return override }
+        #endif
+        return UserDefaults.standard.bool(forKey: key, default: false)
     }
 }

@@ -3,6 +3,16 @@ import XCTest
 
 @MainActor
 final class WidgetDataStoreTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        DetailedAnalyticsSetting.isEnabledOverride = false
+    }
+
+    override func tearDown() {
+        DetailedAnalyticsSetting.isEnabledOverride = nil
+        super.tearDown()
+    }
+
     func testResolvesProgressSnapshotIntoWidgetData() async {
         let provider = Provider(id: "test", displayName: "Test", icon: .providerMark("codex"))
         let descriptor = WidgetDescriptor(

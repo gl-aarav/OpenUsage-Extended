@@ -56,8 +56,7 @@ enum Formatters {
         case .relative:
             let seconds = date.timeIntervalSince(now)
             if seconds <= 5 * 60 {
-                // Show the exact wall-clock time instead of the unhelpful "soon" collapse.
-                return whenLabel(at: date, mode: .absolute, now: now, calendar: calendar)
+                return imminent
             }
             return compactDuration(seconds)
         case .absolute:

@@ -24,8 +24,11 @@ node_modules/
 *.app
 *.xcarchive
 *.xcresult
+.build-test/
 
 # Local appcast / Sparkle feed output
 feed/
 appcast.xml
+
+# Local helper scripts
 createapp.sh

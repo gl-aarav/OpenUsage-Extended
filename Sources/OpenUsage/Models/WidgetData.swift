@@ -16,6 +16,7 @@ struct WidgetData: Hashable {
     static let noDataSubtitle = "No data"
 
     let title: String          // "Claude 5h", "Cursor credits"
+    var providerID: String? = nil
     let icon: IconSource
     let kind: MetricKind
     let used: Double
@@ -463,6 +464,49 @@ struct WidgetData: Hashable {
 // MARK: - Pace (meter state)
 
 extension WidgetData {
+    func pacingTooltip(now: Date = Date()) -> String? {
+        pacingTooltip(for: meterState(now: now), now: now)
+    }
+
+    func pacingTooltip(for state: MeterState, now: Date = Date()) -> String? {
+        switch state {
+        case .noData, .level: return nil
+        case .spent: return "Limit reached"
+        case .healthy(let projectedFraction):
+            if providerID == "kiro", let limit {
+                let left = max(0, limit - (projectedFraction * limit))
+                let formatted = format(left)
+                let suffix = countSuffix.map { " " + $0 } ?? ""
+                return "~\(formatted)\(suffix) left at reset"
+            }
+            let left = Int(((1 - projectedFraction) * 100).rounded())
+            return "~\(left)% left at reset"
+        case .closeToLimit(_, let projectedFraction):
+            if providerID == "kiro", let limit {
+                let left = max(0, limit - (projectedFraction * limit))
+                let formatted = format(left)
+                let suffix = countSuffix.map { " " + $0 } ?? ""
+                return "~\(formatted)\(suffix) left at reset"
+            }
+            let used = Int((projectedFraction * 100).rounded())
+            return "~\(used)% used at reset"
+        case .runningOut(_, let projectedFraction):
+            if providerID == "kiro", let limit {
+                guard projectedFraction > 1 else {
+                    let suffix = countSuffix.map { " " + $0 } ?? ""
+                    return "~0\(suffix) left at reset"
+                }
+                let over = (projectedFraction - 1) * limit
+                let formatted = format(over)
+                let suffix = countSuffix.map { " " + $0 } ?? ""
+                return "~\(formatted)\(suffix) over limit at reset"
+            }
+            guard projectedFraction > 1 else { return "~100% used at reset" }
+            let over = max(1, Int(((projectedFraction - 1) * 100).rounded()))
+            return "~\(over)% over limit at reset"
+        }
+    }
+
     /// The inputs pacing needs, present only for a bounded metric with a known reset window. `nil`
     /// short-circuits the live pace verdict (the bar falls back to absolute level bands)
     /// (e.g. unbounded rows, no-data rows, rows whose reset/period cadence is unknown).

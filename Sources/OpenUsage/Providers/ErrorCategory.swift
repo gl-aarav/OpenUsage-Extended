@@ -54,9 +54,10 @@ protocol CategorizedError: Error {
 extension ClaudeAuthError: CategorizedError {
     var errorCategory: ErrorCategory {
         switch self {
-        case .notLoggedIn, .desktopAppOnly: .notLoggedIn
-        case .sessionExpired, .tokenExpired: .authExpired
-        case .invalidOAuthURL: .authInvalid
+        case .notLoggedIn: .notLoggedIn
+        case .sessionExpired, .tokenExpired, .desktopTokenExpired: .authExpired
+        case .invalidOAuthURL, .desktopCredentialsUnavailable: .authInvalid
+        case .desktopPermissionRequired: .credentialAccess
         case .credentialsChanged: .other
         }
     }
@@ -167,6 +168,15 @@ extension CopilotUsageError: CategorizedError {
         case .invalidResponse: .decoding
         case .requestFailed(let status): ErrorCategory.http(status)
         case .quotaUnavailable: .notAvailable
+        }
+    }
+}
+
+extension OpenCodeUsageError: CategorizedError {
+    var errorCategory: ErrorCategory {
+        switch self {
+        case .notLoggedIn: .notLoggedIn
+        case .credentialsUnreadable, .databaseUnreadable: .credentialAccess
         }
     }
 }

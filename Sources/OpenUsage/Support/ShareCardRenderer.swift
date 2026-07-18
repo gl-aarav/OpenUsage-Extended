@@ -71,14 +71,29 @@ enum ShareCardRenderer {
         appearance: ColorScheme
     ) -> Bool {
         let isExpanded = layout.isProviderExpanded(group.provider.id)
-        let alwaysRows = group.alwaysShownWidgets.compactMap { widget -> WidgetData? in
-            guard let descriptor = layout.descriptor(for: widget) else { return nil }
-            return dataStore.data(for: descriptor)
+        let onDemandShowing = UserDefaults.standard.bool(forKey: OnDemandShowingSetting.key, default: false)
+        
+        let filterRows: ([PlacedWidget]) -> [WidgetData] = { widgets in
+            widgets.compactMap { widget -> WidgetData? in
+                guard let descriptor = layout.descriptor(for: widget) else { return nil }
+                let data = dataStore.data(for: descriptor)
+                if onDemandShowing {
+                    if !layout.isPinned(descriptor.id) && !data.hasData {
+                        return nil
+                    }
+                }
+                return data
+            }
         }
-        let expandedRows = group.expandedWidgets.compactMap { widget -> WidgetData? in
-            guard let descriptor = layout.descriptor(for: widget) else { return nil }
-            return dataStore.data(for: descriptor)
+        
+        var alwaysRows = filterRows(group.alwaysShownWidgets)
+        var expandedRows = filterRows(group.expandedWidgets)
+        
+        if alwaysRows.isEmpty && !expandedRows.isEmpty {
+            alwaysRows = expandedRows
+            expandedRows = []
         }
+        
         let rows = isExpanded ? alwaysRows + expandedRows : alwaysRows
         let view = ShareCardView(
             provider: group.provider,
@@ -110,6 +125,23 @@ enum ShareCardRenderer {
         }
         let view = TotalSpendShareCardView(total: total, metric: metric, appearance: appearance)
         return renderAndCopy(view, label: metric.title.lowercased(), layout: layout)
+    }
+
+    /// The 30-day stats counterpart to `shareTotalSpend`: renders the stacked trend chart
+    /// and copies the PNG to the clipboard.
+    @discardableResult
+    static func shareTotalSpendTrend(
+        days: [TotalSpendTrendDay],
+        metric: TotalSpendMetric,
+        appearance: ColorScheme,
+        layout: LayoutStore
+    ) -> Bool {
+        guard !days.isEmpty else {
+            NSSound.beep()
+            return false
+        }
+        let view = TotalSpendTrendShareCardView(days: days, metric: metric, appearance: appearance)
+        return renderAndCopy(view, label: "\(metric.title.lowercased())-trend", layout: layout)
     }
 
     /// Shared render→copy pipeline for both share actions. Pins the render to regular density (the rows

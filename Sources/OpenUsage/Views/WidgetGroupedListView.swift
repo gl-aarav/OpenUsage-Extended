@@ -21,18 +21,24 @@ struct WidgetGroupedListView: View {
     @State private var activeProviderID: String?
     @State private var activeMetricID: String?
     @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @AppStorage(OnDemandShowingSetting.key) private var onDemandShowing = false
 
     var body: some View {
-        // Provider-section spacing is noticeably wider than the in-card row rhythm (so groups
-        // still read as groups); the exact step comes from the density setting.
-        VStack(alignment: .leading, spacing: density.sectionSpacing) {
-            ForEach(layout.displayGroups) { group in
+        let visibleGroups = layout.displayGroups.filter { group in
+            let alwaysRows = resolvedRows(group.alwaysShownWidgets)
+            let expandedRows = resolvedRows(group.expandedWidgets)
+            let hasLinks = !group.provider.visibleLinks.isEmpty
+            return !alwaysRows.isEmpty || !expandedRows.isEmpty || hasLinks
+        }
+        
+        return VStack(alignment: .leading, spacing: density.sectionSpacing) {
+            ForEach(visibleGroups) { group in
                 section(group)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onPreferenceChange(ReorderFramePreferenceKey.self) { rowFrames = $0 }
-        .animation(Motion.spring, value: layout.displayGroups.map(\.provider.id))
+        .animation(Motion.spring, value: visibleGroups.map(\.provider.id))
     }
 
     private func section(_ group: ProviderGroup) -> some View {
@@ -125,15 +131,21 @@ struct WidgetGroupedListView: View {
         // recomputed several times per row (twice per adjacent pair plus once in `row`).
         let providerID = group.provider.id
         let isExpanded = layout.isProviderExpanded(providerID)
-        let alwaysRows = resolvedRows(group.alwaysShownWidgets)
-        let expandedRows = resolvedRows(group.expandedWidgets)
+        var alwaysRows = resolvedRows(group.alwaysShownWidgets)
+        var expandedRows = resolvedRows(group.expandedWidgets)
+        
+        if alwaysRows.isEmpty && !expandedRows.isEmpty {
+            alwaysRows = expandedRows
+            expandedRows = []
+        }
+        
         // The caret separates Always Visible and On Demand rows, so text-row condensing should not
         // bridge across it. Each side tightens only against rows on the same side of the separator.
         let condensedIDs = visibleCondensedTextRowIDs(alwaysRows: alwaysRows, expandedRows: isExpanded ? expandedRows : [])
         let cardRows = metricCardRows(
             alwaysRows: alwaysRows,
             expandedRows: expandedRows,
-            hasExpandedMetrics: group.hasExpandedMetrics,
+            hasExpandedMetrics: !expandedRows.isEmpty,
             isExpanded: isExpanded,
             links: group.provider.visibleLinks
         )
@@ -159,7 +171,13 @@ struct WidgetGroupedListView: View {
     private func resolvedRows(_ widgets: [PlacedWidget]) -> [ResolvedRow] {
         widgets.compactMap { widget -> ResolvedRow? in
             guard let descriptor = layout.descriptor(for: widget) else { return nil }
-            return ResolvedRow(widget: widget, descriptor: descriptor, data: dataStore.data(for: descriptor))
+            let data = dataStore.data(for: descriptor)
+            if onDemandShowing {
+                if !layout.isPinned(descriptor.id) && !data.hasData {
+                    return nil
+                }
+            }
+            return ResolvedRow(widget: widget, descriptor: descriptor, data: data)
         }
     }
 
@@ -320,20 +338,64 @@ struct WidgetGroupedListView: View {
         guard let group = layout.displayGroups.first(where: { $0.provider.id == providerID }) else {
             return []
         }
-        let alwaysShown = group.alwaysShownWidgets.compactMap { layout.descriptor(for: $0)?.id }
+        
+        let filterWidgets: ([PlacedWidget]) -> [String] = { widgets in
+            widgets.compactMap { widget -> String? in
+                guard let descriptor = layout.descriptor(for: widget) else { return nil }
+                if onDemandShowing {
+                    let data = dataStore.data(for: descriptor)
+                    if !layout.isPinned(descriptor.id) && !data.hasData {
+                        return nil
+                    }
+                }
+                return descriptor.id
+            }
+        }
+        
+        var alwaysShown = filterWidgets(group.alwaysShownWidgets)
+        var expanded = filterWidgets(group.expandedWidgets)
+        
+        if alwaysShown.isEmpty && !expanded.isEmpty {
+            alwaysShown = expanded
+            expanded = []
+        }
+        
         // The caret is a drop target whenever the expanded section is open — including a links-only
         // section (buttons but no expanded metrics), so a metric can be dragged past the caret to tuck
         // it below the fold even when only buttons are showing there.
-        let hasExpandedContent = group.hasExpandedMetrics || !group.provider.visibleLinks.isEmpty
+        let hasExpandedContent = !expanded.isEmpty || !group.provider.visibleLinks.isEmpty
         guard hasExpandedContent, layout.isProviderExpanded(providerID) else { return alwaysShown }
-        let expanded = group.expandedWidgets.compactMap { layout.descriptor(for: $0)?.id }
         return alwaysShown + [expandedDividerID(for: providerID)] + expanded
     }
 
     private func makeProviderLift(for group: ProviderGroup, value: DragGesture.Value) -> ReorderLift? {
         // The floating preview should match what the card shows: only the always-shown rows unless this
         // provider's caret is currently open.
-        let visibleWidgets = layout.isProviderExpanded(group.provider.id) ? group.widgets : group.alwaysShownWidgets
+        var always = group.alwaysShownWidgets
+        var exp = group.expandedWidgets
+        
+        let filterWidgets: ([PlacedWidget]) -> [PlacedWidget] = { widgets in
+            widgets.filter { widget in
+                guard let descriptor = layout.descriptor(for: widget) else { return false }
+                if onDemandShowing {
+                    let data = dataStore.data(for: descriptor)
+                    if !layout.isPinned(descriptor.id) && !data.hasData {
+                        return false
+                    }
+                }
+                return true
+            }
+        }
+        
+        always = filterWidgets(always)
+        exp = filterWidgets(exp)
+        
+        if always.isEmpty && !exp.isEmpty {
+            always = exp
+            exp = []
+        }
+        
+        let visibleWidgets = layout.isProviderExpanded(group.provider.id) ? always + exp : always
         let rows = visibleWidgets.compactMap { widget -> WidgetData? in
             guard let descriptor = layout.descriptor(for: widget) else { return nil }
             return dataStore.data(for: descriptor)

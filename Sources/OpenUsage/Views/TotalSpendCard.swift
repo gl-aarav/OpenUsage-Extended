@@ -221,13 +221,32 @@ struct TotalSpendCard: View {
         .animation(Motion.spring, value: periodRawValue)
         .animation(Motion.spring, value: metricRawValue)
         .contextMenu {
-            Button("Share Screenshot") {
-                ShareCardRenderer.shareTotalSpend(
-                    total: total,
-                    metric: metric,
-                    appearance: colorScheme,
-                    layout: layout
-                )
+            if period == .last30 && !trendDays.isEmpty {
+                Button("Share Pie Chart Screenshot") {
+                    ShareCardRenderer.shareTotalSpend(
+                        total: total,
+                        metric: metric,
+                        appearance: colorScheme,
+                        layout: layout
+                    )
+                }
+                Button("Share 30-Day Stats Screenshot") {
+                    ShareCardRenderer.shareTotalSpendTrend(
+                        days: trendDays,
+                        metric: metric,
+                        appearance: colorScheme,
+                        layout: layout
+                    )
+                }
+            } else {
+                Button("Share Screenshot") {
+                    ShareCardRenderer.shareTotalSpend(
+                        total: total,
+                        metric: metric,
+                        appearance: colorScheme,
+                        layout: layout
+                    )
+                }
             }
         }
     }

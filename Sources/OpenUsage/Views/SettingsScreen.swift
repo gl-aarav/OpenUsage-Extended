@@ -22,6 +22,7 @@ struct SettingsScreen: View {
     @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
     @AppStorage(LogLevelSetting.key) private var logLevel = LogLevelSetting.fallback
     @AppStorage(DetailedAnalyticsSetting.key) private var detailedAnalytics = false
+    @AppStorage(OnDemandShowingSetting.key) private var onDemandShowing = false
     /// Surfaced under the Advanced rows when copying the path or revealing the file fails.
     @State private var logActionError: String?
     /// macOS notification authorization for OpenUsage, surfaced in the Notifications section so a
@@ -140,6 +141,11 @@ struct SettingsScreen: View {
                     Toggle("", isOn: $store.alwaysShowPacing)
                         .settingsSwitchStyle()
                         .hoverTooltip("Show how you're pacing on every metric, not just ones near their limit")
+                }
+                row("On-Demand Showing") {
+                    Toggle("", isOn: $onDemandShowing)
+                        .settingsSwitchStyle()
+                        .hoverTooltip("Show unstarred usage metrics for providers only when they have data. Starred metrics are always shown.")
                 }
                 row("Detailed Analytics") {
                     Toggle("", isOn: $detailedAnalytics)
